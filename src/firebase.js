@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app'
-import { getDatabase, ref, set } from 'firebase/database'
+import { getDatabase, ref, set, get } from 'firebase/database'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -23,7 +23,7 @@ export function isFirebaseConfigured() {
 let firebaseApp
 
 export function getFirebaseDatabase() {
-  if (!isFirebaseConfigured) {
+  if (!isFirebaseConfigured()) {
     return null
   }
 
@@ -45,4 +45,14 @@ export function saveDatabaseSnapshot(value) {
   }
 
   return set(ref(database, '/tefmaster'), value)
+}
+
+export async function loadDatabaseSnapshot() {
+  const database = getFirebaseDatabase()
+  if (!database) {
+    return null
+  }
+
+  const snapshot = await get(ref(database, '/tefmaster'))
+  return snapshot.exists() ? snapshot.val() : null
 }

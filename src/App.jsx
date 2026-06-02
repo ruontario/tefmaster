@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
-import { isFirebaseConfigured, saveDatabaseSnapshot } from './firebase'
+import {
+  isFirebaseConfigured,
+  saveDatabaseSnapshot,
+  loadDatabaseSnapshot,
+} from './firebase'
 
 const STORAGE_KEY = 'tefmaster-db-v1'
 
@@ -234,20 +238,27 @@ function App() {
     lastSync: null,
     error: null,
   })
+  const [firebaseLoaded, setFirebaseLoaded] = useState(false)
 
   const activeSection = examSections.find((section) => section.route === route)
 
   const totalResources = useMemo(() => {
-    const qaCount = Object.values(database.qa).reduce(
+    const qa = database?.qa || createEmptyDatabase().qa
+    const mcqTests = database?.mcqTests || createEmptyDatabase().mcqTests
+
+    const qaCount = Object.values(qa).reduce(
       (sectionTotal, section) =>
         sectionTotal +
-        Object.values(section).reduce((partTotal, items) => partTotal + items.length, 0),
+        Object.values(section).reduce((partTotal, items) => partTotal + (items?.length || 0), 0),
       0,
     )
-    const mcqCount = Object.values(database.mcqTests).reduce(
+    const mcqCount = Object.values(mcqTests).reduce(
       (sectionTotal, tests) =>
         sectionTotal +
-        tests.reduce((testTotal, test) => testTotal + test.questions.length, 0),
+        tests.reduce(
+          (testTotal, test) => testTotal + ((test?.questions?.length || 0)),
+          0,
+        ),
       0,
     )
 
@@ -270,6 +281,47 @@ function App() {
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
+      return
+    }
+
+    let active = true
+    setFirebaseSyncState((current) => ({
+      ...current,
+      enabled: true,
+      error: null,
+    }))
+
+    loadDatabaseSnapshot()
+      .then((remoteDatabase) => {
+        if (!active) return
+        if (remoteDatabase) {
+          setDatabase((current) => {
+            const normalizedRemote = normalizeDatabase(remoteDatabase)
+            if (JSON.stringify(normalizedRemote) === JSON.stringify(current)) {
+              return current
+            }
+            return normalizedRemote
+          })
+        }
+        setFirebaseLoaded(true)
+      })
+      .catch((error) => {
+        if (!active) return
+        setFirebaseSyncState((current) => ({
+          ...current,
+          enabled: true,
+          error: error.message,
+        }))
+        setFirebaseLoaded(true)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isFirebaseConfigured() || !firebaseLoaded) {
       setFirebaseSyncState((current) => ({
         ...current,
         enabled: false,
@@ -306,7 +358,7 @@ function App() {
     return () => {
       active = false
     }
-  }, [database])
+  }, [database, firebaseLoaded])
 
   function updateQaDraft(sectionId, partKey, field, value) {
     const draftKey = `${sectionId}-${partKey}`
@@ -640,8 +692,11 @@ function SectionPage({
   onAddMcqQuestion,
   onRemoveMcqQuestion,
 }) {
-  const qaSection = database.qa[section.id]
-  const readingTests = database.mcqTests[section.id]
+  const qaSection = database?.qa?.[section.id] || {
+    sectionA: [],
+    sectionB: [],
+  }
+  const readingTests = database?.mcqTests?.[section.id] || null
 
   return (
     <section className="page-shell">
@@ -701,7 +756,7 @@ function SectionPage({
         <p>{section.b2Goal}</p>
       </article>
 
-      {qaSection && (
+      {section.parts?.length > 0 && qaSection && (
         <QaDatabase
           section={section}
           qaSection={qaSection}
@@ -712,7 +767,7 @@ function SectionPage({
         />
       )}
 
-      {readingTests && (
+      {readingTests?.length > 0 && readingTests[0] && (
         <McqDatabase
           section={section}
           test={readingTests[0]}
@@ -832,7 +887,11 @@ function McqDatabase({
   onAddQuestion,
   onRemoveQuestion,
 }) {
-  const progress = `${test.questions.length}/${test.targetQuestionCount}`
+  if (!test) {
+    return null
+  }
+
+  const progress = `${test.questions?.length || 0}/${test.targetQuestionCount}`
 
   return (
     <div className="database-panel">
@@ -907,16 +966,19 @@ function McqDatabase({
             rows="3"
           />
         </label>
-        <button type="submit" disabled={test.questions.length >= test.targetQuestionCount}>
+        <button
+          type="submit"
+          disabled={(test.questions?.length || 0) >= test.targetQuestionCount}
+        >
           Ajouter la question
         </button>
       </form>
 
       <div className="database-list">
-        {test.questions.length === 0 ? (
+        {(test.questions?.length || 0) === 0 ? (
           <p className="empty-state">Aucune question QCM ajoutée.</p>
         ) : (
-          test.questions.map((item, index) => (
+          (test.questions || []).map((item, index) => (
             <article className="mcq-item" key={item.id}>
               <div className="mcq-question">
                 <span>Question {index + 1}</span>
