@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const STORAGE_KEY = 'tefmaster-content'
+const STORAGE_KEY = 'tefmaster-db-v1'
 
 const examSections = [
   {
@@ -20,6 +20,7 @@ const examSections = [
       "Pour viser B2+ / NCLC 7+, entraînez-vous à parler avec structure : question claire, relance pertinente, opinion nuancée, exemples précis et conclusion nette.",
     parts: [
       {
+        key: 'sectionA',
         label: 'Section A',
         duration: '5 minutes',
         task: 'Obtenir des renseignements',
@@ -27,6 +28,7 @@ const examSections = [
           "Préparez des questions ouvertes, reformulez l'information reçue et gardez un échange fluide.",
       },
       {
+        key: 'sectionB',
         label: 'Section B',
         duration: '10 minutes',
         task: 'Argumenter pour convaincre',
@@ -50,6 +52,7 @@ const examSections = [
       "Pour atteindre B2+ / NCLC 7+, travaillez les connecteurs, la progression des idées, la précision grammaticale et la richesse lexicale.",
     parts: [
       {
+        key: 'sectionA',
         label: 'Section A',
         duration: '25 minutes',
         task: "Écrire la suite d'un article",
@@ -58,6 +61,7 @@ const examSections = [
           "Respectez le ton de l'article, poursuivez logiquement l'information et évitez les ruptures de style.",
       },
       {
+        key: 'sectionB',
         label: 'Section B',
         duration: '35 minutes',
         task: 'Exprimer son point de vue et le justifier',
@@ -142,40 +146,107 @@ const b2Habits = [
   'Analyser ses erreurs après chaque pratique et les convertir en objectifs ciblés.',
 ]
 
-const emptyDraft = {
-  title: '',
-  type: 'Sujet',
-  notes: '',
+const emptyQaDraft = {
+  question: '',
+  answer: '',
+}
+
+const emptyMcqDraft = {
+  passage: '',
+  question: '',
+  choices: ['', '', '', ''],
+  answerIndex: 0,
+  explanation: '',
+}
+
+function createEmptyDatabase() {
+  return {
+    qa: {
+      'expression-orale': {
+        sectionA: [],
+        sectionB: [],
+      },
+      'expression-ecrite': {
+        sectionA: [],
+        sectionB: [],
+      },
+    },
+    mcqTests: {
+      'comprehension-ecrite': [
+        {
+          id: 'reading-test-1',
+          title: 'TEF Canada - Compréhension écrite - Test 1',
+          targetQuestionCount: 40,
+          questions: [],
+        },
+      ],
+    },
+  }
+}
+
+function normalizeDatabase(value) {
+  const empty = createEmptyDatabase()
+
+  return {
+    qa: {
+      'expression-orale': {
+        sectionA: value?.qa?.['expression-orale']?.sectionA || [],
+        sectionB: value?.qa?.['expression-orale']?.sectionB || [],
+      },
+      'expression-ecrite': {
+        sectionA: value?.qa?.['expression-ecrite']?.sectionA || [],
+        sectionB: value?.qa?.['expression-ecrite']?.sectionB || [],
+      },
+    },
+    mcqTests: {
+      'comprehension-ecrite':
+        value?.mcqTests?.['comprehension-ecrite'] ||
+        empty.mcqTests['comprehension-ecrite'],
+    },
+  }
 }
 
 function getInitialRoute() {
   return window.location.hash.replace(/^#/, '') || '/'
 }
 
-function loadSavedContent() {
+function loadDatabase() {
   try {
     const saved = window.localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : {}
+    return saved ? normalizeDatabase(JSON.parse(saved)) : createEmptyDatabase()
   } catch {
-    return {}
+    return createEmptyDatabase()
   }
+}
+
+function makeId() {
+  return crypto.randomUUID()
 }
 
 function App() {
   const [route, setRoute] = useState(getInitialRoute)
-  const [contentBySection, setContentBySection] = useState(loadSavedContent)
-  const [drafts, setDrafts] = useState({})
+  const [database, setDatabase] = useState(loadDatabase)
+  const [qaDrafts, setQaDrafts] = useState({})
+  const [mcqDraft, setMcqDraft] = useState(emptyMcqDraft)
 
   const activeSection = examSections.find((section) => section.route === route)
 
-  const totalResources = useMemo(
-    () =>
-      Object.values(contentBySection).reduce(
-        (total, items) => total + items.length,
-        0,
-      ),
-    [contentBySection],
-  )
+  const totalResources = useMemo(() => {
+    const qaCount = Object.values(database.qa).reduce(
+      (sectionTotal, section) =>
+        sectionTotal +
+        Object.values(section).reduce((partTotal, items) => partTotal + items.length, 0),
+      0,
+    )
+    const mcqCount = Object.values(database.mcqTests).reduce(
+      (sectionTotal, tests) =>
+        sectionTotal +
+        tests.reduce((testTotal, test) => testTotal + test.questions.length, 0),
+      0,
+    )
+
+    return qaCount + mcqCount
+  }, [database])
 
   useEffect(() => {
     function handleHashChange() {
@@ -188,54 +259,136 @@ function App() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(contentBySection))
-  }, [contentBySection])
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(database))
+  }, [database])
 
-  function updateDraft(sectionId, field, value) {
-    setDrafts((current) => ({
+  function updateQaDraft(sectionId, partKey, field, value) {
+    const draftKey = `${sectionId}-${partKey}`
+    setQaDrafts((current) => ({
       ...current,
-      [sectionId]: {
-        ...emptyDraft,
-        ...current[sectionId],
+      [draftKey]: {
+        ...emptyQaDraft,
+        ...current[draftKey],
         [field]: value,
       },
     }))
   }
 
-  function addResource(sectionId) {
-    const draft = { ...emptyDraft, ...drafts[sectionId] }
-    const title = draft.title.trim()
-    const notes = draft.notes.trim()
+  function addQaItem(sectionId, partKey) {
+    const draftKey = `${sectionId}-${partKey}`
+    const draft = { ...emptyQaDraft, ...qaDrafts[draftKey] }
+    const question = draft.question.trim()
+    const answer = draft.answer.trim()
 
-    if (!title || !notes) {
+    if (!question || !answer) {
       return
     }
 
-    setContentBySection((current) => ({
+    setDatabase((current) => ({
       ...current,
-      [sectionId]: [
-        ...(current[sectionId] || []),
-        {
-          id: crypto.randomUUID(),
-          title,
-          type: draft.type,
-          notes,
-          createdAt: new Date().toISOString(),
+      qa: {
+        ...current.qa,
+        [sectionId]: {
+          ...current.qa[sectionId],
+          [partKey]: [
+            ...current.qa[sectionId][partKey],
+            {
+              id: makeId(),
+              question,
+              answer,
+              createdAt: new Date().toISOString(),
+            },
+          ],
         },
-      ],
+      },
     }))
-    setDrafts((current) => ({
+    setQaDrafts((current) => ({
       ...current,
-      [sectionId]: emptyDraft,
+      [draftKey]: emptyQaDraft,
     }))
   }
 
-  function removeResource(sectionId, resourceId) {
-    setContentBySection((current) => ({
+  function removeQaItem(sectionId, partKey, itemId) {
+    setDatabase((current) => ({
       ...current,
-      [sectionId]: (current[sectionId] || []).filter(
-        (resource) => resource.id !== resourceId,
+      qa: {
+        ...current.qa,
+        [sectionId]: {
+          ...current.qa[sectionId],
+          [partKey]: current.qa[sectionId][partKey].filter((item) => item.id !== itemId),
+        },
+      },
+    }))
+  }
+
+  function updateMcqDraft(field, value) {
+    setMcqDraft((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  function updateMcqChoice(index, value) {
+    setMcqDraft((current) => ({
+      ...current,
+      choices: current.choices.map((choice, choiceIndex) =>
+        choiceIndex === index ? value : choice,
       ),
+    }))
+  }
+
+  function addMcqQuestion(sectionId, testId) {
+    const passage = mcqDraft.passage.trim()
+    const question = mcqDraft.question.trim()
+    const choices = mcqDraft.choices.map((choice) => choice.trim())
+    const explanation = mcqDraft.explanation.trim()
+
+    if (!question || choices.some((choice) => !choice)) {
+      return
+    }
+
+    setDatabase((current) => ({
+      ...current,
+      mcqTests: {
+        ...current.mcqTests,
+        [sectionId]: current.mcqTests[sectionId].map((test) =>
+          test.id === testId
+            ? {
+                ...test,
+                questions: [
+                  ...test.questions,
+                  {
+                    id: makeId(),
+                    passage,
+                    question,
+                    choices,
+                    answerIndex: Number(mcqDraft.answerIndex),
+                    explanation,
+                    createdAt: new Date().toISOString(),
+                  },
+                ],
+              }
+            : test,
+        ),
+      },
+    }))
+    setMcqDraft(emptyMcqDraft)
+  }
+
+  function removeMcqQuestion(sectionId, testId, questionId) {
+    setDatabase((current) => ({
+      ...current,
+      mcqTests: {
+        ...current.mcqTests,
+        [sectionId]: current.mcqTests[sectionId].map((test) =>
+          test.id === testId
+            ? {
+                ...test,
+                questions: test.questions.filter((question) => question.id !== questionId),
+              }
+            : test,
+        ),
+      },
     }))
   }
 
@@ -245,11 +398,16 @@ function App() {
       {activeSection ? (
         <SectionPage
           section={activeSection}
-          draft={{ ...emptyDraft, ...drafts[activeSection.id] }}
-          resources={contentBySection[activeSection.id] || []}
-          onDraftChange={updateDraft}
-          onAddResource={addResource}
-          onRemoveResource={removeResource}
+          database={database}
+          qaDrafts={qaDrafts}
+          mcqDraft={mcqDraft}
+          onQaDraftChange={updateQaDraft}
+          onAddQaItem={addQaItem}
+          onRemoveQaItem={removeQaItem}
+          onMcqDraftChange={updateMcqDraft}
+          onMcqChoiceChange={updateMcqChoice}
+          onAddMcqQuestion={addMcqQuestion}
+          onRemoveMcqQuestion={removeMcqQuestion}
         />
       ) : (
         <HomePage totalResources={totalResources} />
@@ -281,8 +439,8 @@ function SiteHeader({ route, totalResources }) {
         </div>
       </nav>
       <div className="header-strip" aria-label="Statistiques du site">
-        <span>4 épreuves TEF Canada</span>
-        <span>{totalResources} contenus ajoutés</span>
+        <span>Base locale GitHub Pages</span>
+        <span>{totalResources} contenus enregistrés</span>
       </div>
     </header>
   )
@@ -297,12 +455,12 @@ function HomePage({ totalResources }) {
           <h1>Construisez votre parcours vers B2+ et NCLC 7+.</h1>
           <p className="hero-copy">
             TEF Master organise l’examen en quatre épreuves, avec des repères
-            de format, des objectifs CECR et un espace pour stocker vos contenus
-            d’entraînement.
+            de format, des objectifs CECR et une base locale pour stocker vos
+            questions, réponses et tests QCM.
           </p>
           <div className="hero-actions">
-            <a className="primary-link" href="#/expression-orale">
-              Commencer par l’oral
+            <a className="primary-link" href="#/expression-ecrite">
+              Ajouter des questions
             </a>
             <a className="secondary-link" href="#format">
               Voir le format
@@ -341,6 +499,23 @@ function HomePage({ totalResources }) {
               <p>{section.format}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="page-section database-callout">
+        <div>
+          <p className="eyebrow">Base de données locale</p>
+          <h2>Ajoutez votre propre banque TEF directement sur GitHub Pages.</h2>
+          <p>
+            Les pages Expression orale et Expression écrite acceptent des
+            questions-réponses séparées en Section A et Section B. La page
+            Compréhension écrite permet de constituer un test TEF de 40 QCM avec
+            quatre choix et une bonne réponse.
+          </p>
+        </div>
+        <div className="database-stats">
+          <strong>{totalResources}</strong>
+          <span>éléments sauvegardés dans ce navigateur</span>
         </div>
       </section>
 
@@ -391,33 +566,26 @@ function HomePage({ totalResources }) {
           ))}
         </div>
       </section>
-
-      <section className="page-section resource-callout">
-        <div>
-          <p className="eyebrow">Votre espace de contenu</p>
-          <h2>{totalResources} contenus sauvegardés localement</h2>
-          <p>
-            Chaque page d’épreuve contient un formulaire pour ajouter vos sujets,
-            exercices, corrections, liens et notes. Les contenus sont conservés
-            dans le navigateur.
-          </p>
-        </div>
-        <a className="primary-link dark" href="#/expression-ecrite">
-          Ajouter un contenu
-        </a>
-      </section>
     </>
   )
 }
 
 function SectionPage({
   section,
-  draft,
-  resources,
-  onDraftChange,
-  onAddResource,
-  onRemoveResource,
+  database,
+  qaDrafts,
+  mcqDraft,
+  onQaDraftChange,
+  onAddQaItem,
+  onRemoveQaItem,
+  onMcqDraftChange,
+  onMcqChoiceChange,
+  onAddMcqQuestion,
+  onRemoveMcqQuestion,
 }) {
+  const qaSection = database.qa[section.id]
+  const readingTests = database.mcqTests[section.id]
+
   return (
     <section className="page-shell">
       <div className="section-hero">
@@ -476,99 +644,242 @@ function SectionPage({
         <p>{section.b2Goal}</p>
       </article>
 
-      <ContentManager
-        section={section}
-        draft={draft}
-        resources={resources}
-        onDraftChange={onDraftChange}
-        onAddResource={onAddResource}
-        onRemoveResource={onRemoveResource}
-      />
+      {qaSection && (
+        <QaDatabase
+          section={section}
+          qaSection={qaSection}
+          qaDrafts={qaDrafts}
+          onDraftChange={onQaDraftChange}
+          onAddItem={onAddQaItem}
+          onRemoveItem={onRemoveQaItem}
+        />
+      )}
+
+      {readingTests && (
+        <McqDatabase
+          section={section}
+          test={readingTests[0]}
+          draft={mcqDraft}
+          onDraftChange={onMcqDraftChange}
+          onChoiceChange={onMcqChoiceChange}
+          onAddQuestion={onAddMcqQuestion}
+          onRemoveQuestion={onRemoveMcqQuestion}
+        />
+      )}
     </section>
   )
 }
 
-function ContentManager({
+function QaDatabase({
   section,
-  draft,
-  resources,
+  qaSection,
+  qaDrafts,
   onDraftChange,
-  onAddResource,
-  onRemoveResource,
+  onAddItem,
+  onRemoveItem,
 }) {
   return (
-    <div className="content-panel">
+    <div className="database-panel">
       <div className="panel-heading">
         <div>
-          <h2>Ajouter du contenu</h2>
+          <p className="eyebrow">Questions et réponses</p>
+          <h2>Base de contenu {section.title}</h2>
           <p>
-            Ajoutez vos sujets, exercices, corrections, liens ou notes pour cette
-            épreuve.
+            Ajoutez des questions et modèles de réponse séparés par section
+            d’épreuve.
           </p>
         </div>
       </div>
 
+      <div className="qa-grid">
+        {section.parts.map((part) => {
+          const draftKey = `${section.id}-${part.key}`
+          const draft = { ...emptyQaDraft, ...qaDrafts[draftKey] }
+          const items = qaSection[part.key]
+
+          return (
+            <article className="qa-column" key={part.key}>
+              <div className="qa-heading">
+                <span>{part.label}</span>
+                <h3>{part.task}</h3>
+                <small>{items.length} contenus</small>
+              </div>
+
+              <form
+                className="database-form"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  onAddItem(section.id, part.key)
+                }}
+              >
+                <label>
+                  Question / consigne
+                  <textarea
+                    value={draft.question}
+                    onChange={(event) =>
+                      onDraftChange(section.id, part.key, 'question', event.target.value)
+                    }
+                    placeholder="Ex. Vous lisez une annonce pour un cours de français..."
+                    rows="4"
+                  />
+                </label>
+                <label>
+                  Réponse modèle
+                  <textarea
+                    value={draft.answer}
+                    onChange={(event) =>
+                      onDraftChange(section.id, part.key, 'answer', event.target.value)
+                    }
+                    placeholder="Ajoutez une réponse type, une structure ou des idées clés."
+                    rows="5"
+                  />
+                </label>
+                <button type="submit">Ajouter à {part.label}</button>
+              </form>
+
+              <div className="database-list">
+                {items.length === 0 ? (
+                  <p className="empty-state">Aucune question ajoutée.</p>
+                ) : (
+                  items.map((item, index) => (
+                    <article className="database-item" key={item.id}>
+                      <div>
+                        <span>Question {index + 1}</span>
+                        <h4>{item.question}</h4>
+                        <p>{item.answer}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveItem(section.id, part.key, item.id)}
+                      >
+                        Supprimer
+                      </button>
+                    </article>
+                  ))
+                )}
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function McqDatabase({
+  section,
+  test,
+  draft,
+  onDraftChange,
+  onChoiceChange,
+  onAddQuestion,
+  onRemoveQuestion,
+}) {
+  const progress = `${test.questions.length}/${test.targetQuestionCount}`
+
+  return (
+    <div className="database-panel">
+      <div className="panel-heading">
+        <div>
+          <p className="eyebrow">Test QCM</p>
+          <h2>{test.title}</h2>
+          <p>
+            Construisez un test complet de compréhension écrite avec 40
+            questions, quatre choix et une seule bonne réponse.
+          </p>
+        </div>
+        <div className="test-progress">
+          <strong>{progress}</strong>
+          <span>questions</span>
+        </div>
+      </div>
+
       <form
-        className="content-form"
+        className="mcq-form"
         onSubmit={(event) => {
           event.preventDefault()
-          onAddResource(section.id)
+          onAddQuestion(section.id, test.id)
         }}
       >
-        <label>
-          Titre
-          <input
-            value={draft.title}
-            onChange={(event) =>
-              onDraftChange(section.id, 'title', event.target.value)
-            }
-            placeholder="Ex. Sujet type 1"
+        <label className="wide">
+          Texte ou document support
+          <textarea
+            value={draft.passage}
+            onChange={(event) => onDraftChange('passage', event.target.value)}
+            placeholder="Collez le texte court, l'annonce ou le document associé à la question."
+            rows="4"
           />
         </label>
+        <label className="wide">
+          Question
+          <textarea
+            value={draft.question}
+            onChange={(event) => onDraftChange('question', event.target.value)}
+            placeholder="Ex. Quelle information est correcte selon le document ?"
+            rows="3"
+          />
+        </label>
+        {draft.choices.map((choice, index) => (
+          <label key={index}>
+            Choix {index + 1}
+            <input
+              value={choice}
+              onChange={(event) => onChoiceChange(index, event.target.value)}
+              placeholder={`Réponse ${index + 1}`}
+            />
+          </label>
+        ))}
         <label>
-          Type
+          Bonne réponse
           <select
-            value={draft.type}
-            onChange={(event) =>
-              onDraftChange(section.id, 'type', event.target.value)
-            }
+            value={draft.answerIndex}
+            onChange={(event) => onDraftChange('answerIndex', event.target.value)}
           >
-            <option>Sujet</option>
-            <option>Consigne</option>
-            <option>Exercice</option>
-            <option>Correction</option>
-            <option>Lien</option>
-            <option>Note</option>
+            <option value="0">Choix 1</option>
+            <option value="1">Choix 2</option>
+            <option value="2">Choix 3</option>
+            <option value="3">Choix 4</option>
           </select>
         </label>
         <label className="wide">
-          Notes
+          Explication / correction
           <textarea
-            value={draft.notes}
-            onChange={(event) =>
-              onDraftChange(section.id, 'notes', event.target.value)
-            }
-            placeholder="Collez ici le contenu ou une description."
-            rows="5"
+            value={draft.explanation}
+            onChange={(event) => onDraftChange('explanation', event.target.value)}
+            placeholder="Expliquez pourquoi cette réponse est correcte."
+            rows="3"
           />
         </label>
-        <button type="submit">Ajouter</button>
+        <button type="submit" disabled={test.questions.length >= test.targetQuestionCount}>
+          Ajouter la question
+        </button>
       </form>
 
-      <div className="resource-list">
-        {resources.length === 0 ? (
-          <p className="empty-state">Aucun contenu ajouté.</p>
+      <div className="database-list">
+        {test.questions.length === 0 ? (
+          <p className="empty-state">Aucune question QCM ajoutée.</p>
         ) : (
-          resources.map((resource) => (
-            <article className="resource-card" key={resource.id}>
-              <div>
-                <span>{resource.type}</span>
-                <h3>{resource.title}</h3>
-                <p>{resource.notes}</p>
+          test.questions.map((item, index) => (
+            <article className="mcq-item" key={item.id}>
+              <div className="mcq-question">
+                <span>Question {index + 1}</span>
+                {item.passage && <p className="passage">{item.passage}</p>}
+                <h3>{item.question}</h3>
+                <ol type="A">
+                  {item.choices.map((choice, choiceIndex) => (
+                    <li
+                      className={choiceIndex === item.answerIndex ? 'correct-choice' : ''}
+                      key={choice}
+                    >
+                      {choice}
+                    </li>
+                  ))}
+                </ol>
+                {item.explanation && <p>{item.explanation}</p>}
               </div>
               <button
                 type="button"
-                onClick={() => onRemoveResource(section.id, resource.id)}
+                onClick={() => onRemoveQuestion(section.id, test.id, item.id)}
               >
                 Supprimer
               </button>

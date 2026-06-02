@@ -188,7 +188,8 @@
 .intro-grid,
 .cefr-section,
 .strategy-section,
-.resource-callout {
+.resource-callout,
+.database-callout {
   margin-top: 72px;
 }
 
@@ -202,8 +203,10 @@
 .intro-copy h2,
 .section-heading h2,
 .resource-callout h2,
+.database-callout h2,
 .content-panel h2,
-.strategy-card h2 {
+.strategy-card h2,
+.database-panel h2 {
   margin: 0;
   color: #102338;
   font-size: clamp(30px, 4vw, 46px);
@@ -213,6 +216,7 @@
 .intro-copy p,
 .section-heading p,
 .resource-callout p,
+.database-callout p,
 .panel-heading p,
 .strategy-card p {
   color: #53677d;
@@ -273,7 +277,9 @@
 .details div,
 .scoring,
 .content-panel,
-.resource-callout {
+.resource-callout,
+.database-callout,
+.database-panel {
   border: 1px solid #dce4ec;
   border-radius: 8px;
   background: #ffffff;
@@ -334,6 +340,33 @@
   align-items: center;
   justify-content: space-between;
   gap: 24px;
+}
+
+.database-callout {
+  padding: 26px;
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 24px;
+  align-items: center;
+}
+
+.database-stats {
+  padding: 22px;
+  border-radius: 8px;
+  background: #edf4fb;
+  display: grid;
+  gap: 4px;
+}
+
+.database-stats strong {
+  color: #102338;
+  font-size: 42px;
+  line-height: 1;
+}
+
+.database-stats span {
+  color: #53677d;
+  font-weight: 750;
 }
 
 .page-shell {
@@ -398,7 +431,8 @@
 
 .scoring,
 .strategy-card,
-.content-panel {
+.content-panel,
+.database-panel {
   margin-top: 18px;
   padding: 22px;
 }
@@ -410,7 +444,8 @@
 }
 
 .strategy-card h2,
-.content-panel h2 {
+.content-panel h2,
+.database-panel h2 {
   font-size: 28px;
 }
 
@@ -428,7 +463,9 @@
   margin-top: 22px;
 }
 
-.content-form label {
+.content-form label,
+.database-form label,
+.mcq-form label {
   display: grid;
   gap: 8px;
   color: #102338;
@@ -436,7 +473,8 @@
   font-weight: 800;
 }
 
-.content-form .wide {
+.content-form .wide,
+.mcq-form .wide {
   grid-column: 1 / -1;
 }
 
@@ -464,7 +502,11 @@ textarea:focus {
 }
 
 .content-form button,
-.resource-card button {
+.resource-card button,
+.database-form button,
+.mcq-form button,
+.database-item button,
+.mcq-item button {
   justify-self: start;
   border: 0;
   border-radius: 8px;
@@ -475,14 +517,23 @@ textarea:focus {
   cursor: pointer;
 }
 
-.content-form button {
+.content-form button,
+.database-form button,
+.mcq-form button {
   padding: 12px 22px;
 }
 
-.resource-card button {
+.resource-card button,
+.database-item button,
+.mcq-item button {
   padding: 9px 12px;
   background: #eef2f6;
   color: #102338;
+}
+
+.mcq-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .resource-list {
@@ -515,12 +566,142 @@ textarea:focus {
   white-space: pre-wrap;
 }
 
+.qa-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.qa-column {
+  padding: 18px;
+  border: 1px solid #dce4ec;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.qa-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.qa-heading span,
+.database-item span,
+.mcq-question span {
+  color: #6e8194;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.qa-heading h3 {
+  margin: 0;
+  color: #102338;
+  font-size: 22px;
+}
+
+.qa-heading small {
+  color: #53677d;
+  font-weight: 750;
+}
+
+.database-form,
+.mcq-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.mcq-form {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.database-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.database-item,
+.mcq-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid #dce4ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.database-item h4,
+.mcq-question h3 {
+  margin: 4px 0 0;
+  color: #102338;
+}
+
+.database-item p,
+.mcq-question p {
+  margin: 10px 0 0;
+  color: #53677d;
+  white-space: pre-wrap;
+}
+
+.test-progress {
+  min-width: 150px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #edf4fb;
+  display: grid;
+  gap: 2px;
+  text-align: center;
+}
+
+.test-progress strong {
+  color: #102338;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.test-progress span {
+  color: #53677d;
+  font-weight: 750;
+}
+
+.mcq-question {
+  flex: 1;
+}
+
+.mcq-question ol {
+  margin: 12px 0 0;
+  padding-left: 24px;
+  color: #102338;
+}
+
+.mcq-question li {
+  padding: 4px 0;
+}
+
+.mcq-question .passage {
+  padding: 12px;
+  border-radius: 8px;
+  background: #f6f8fb;
+}
+
+.correct-choice {
+  color: #0f766e;
+  font-weight: 850;
+}
+
 @media (max-width: 980px) {
   .topbar,
   .header-strip,
   .panel-heading,
   .resource-card,
-  .resource-callout {
+  .resource-callout,
+  .database-item,
+  .mcq-item {
     flex-direction: column;
     align-items: stretch;
   }
@@ -540,7 +721,10 @@ textarea:focus {
   .details,
   .part-list,
   .content-form,
-  .format-row {
+  .format-row,
+  .database-callout,
+  .qa-grid,
+  .mcq-form {
     grid-template-columns: 1fr;
   }
 
