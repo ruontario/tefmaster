@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { isFirebaseConfigured, saveDatabaseSnapshot } from './firebase'
 
 const STORAGE_KEY = 'tefmaster-db-v1'
 
@@ -228,6 +229,11 @@ function App() {
   const [database, setDatabase] = useState(loadDatabase)
   const [qaDrafts, setQaDrafts] = useState({})
   const [mcqDraft, setMcqDraft] = useState(emptyMcqDraft)
+  const [firebaseSyncState, setFirebaseSyncState] = useState({
+    enabled: false,
+    lastSync: null,
+    error: null,
+  })
 
   const activeSection = examSections.find((section) => section.route === route)
 
@@ -260,6 +266,46 @@ function App() {
 
   useEffect(() => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(database))
+  }, [database])
+
+  useEffect(() => {
+    if (!isFirebaseConfigured()) {
+      setFirebaseSyncState((current) => ({
+        ...current,
+        enabled: false,
+      }))
+      return
+    }
+
+    let active = true
+    setFirebaseSyncState((current) => ({
+      ...current,
+      enabled: true,
+      error: null,
+    }))
+
+    saveDatabaseSnapshot(database)
+      .then(() => {
+        if (!active) return
+        setFirebaseSyncState((current) => ({
+          ...current,
+          enabled: true,
+          lastSync: new Date().toISOString(),
+          error: null,
+        }))
+      })
+      .catch((error) => {
+        if (!active) return
+        setFirebaseSyncState((current) => ({
+          ...current,
+          enabled: true,
+          error: error.message,
+        }))
+      })
+
+    return () => {
+      active = false
+    }
   }, [database])
 
   function updateQaDraft(sectionId, partKey, field, value) {
@@ -394,7 +440,11 @@ function App() {
 
   return (
     <main>
-      <SiteHeader route={route} totalResources={totalResources} />
+      <SiteHeader
+        route={route}
+        totalResources={totalResources}
+        firebaseSyncState={firebaseSyncState}
+      />
       {activeSection ? (
         <SectionPage
           section={activeSection}
@@ -416,7 +466,7 @@ function App() {
   )
 }
 
-function SiteHeader({ route, totalResources }) {
+function SiteHeader({ route, totalResources, firebaseSyncState }) {
   return (
     <header className="site-header">
       <nav className="topbar" aria-label="Navigation principale">
@@ -441,6 +491,13 @@ function SiteHeader({ route, totalResources }) {
       <div className="header-strip" aria-label="Statistiques du site">
         <span>Base locale GitHub Pages</span>
         <span>{totalResources} contenus enregistrés</span>
+        <span>
+          {firebaseSyncState.enabled
+            ? firebaseSyncState.error
+              ? `Firebase erreur: ${firebaseSyncState.error}`
+              : `Firebase synchronisé ${firebaseSyncState.lastSync ?? 'en attente'}`
+            : 'Firebase non configuré'}
+        </span>
       </div>
     </header>
   )

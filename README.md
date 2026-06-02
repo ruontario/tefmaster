@@ -14,3 +14,13 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Firebase Realtime Database
+
+This app can sync saved inputs from local storage to Firebase Realtime Database.
+
+1. Copy `.env.example` to `.env.local`.
+2. Fill in your Firebase project values.
+3. Restart the Vite dev server if it is running.
+
+When configured, the app will attempt to write the current database snapshot to Firebase automatically.
