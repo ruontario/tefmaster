@@ -11,12 +11,14 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-export const isFirebaseConfigured = Boolean(
-  firebaseConfig.apiKey &&
-    firebaseConfig.databaseURL &&
-    firebaseConfig.projectId &&
-    firebaseConfig.appId,
-)
+export function isFirebaseConfigured() {
+  return Boolean(
+    firebaseConfig.apiKey &&
+      firebaseConfig.databaseURL &&
+      firebaseConfig.projectId &&
+      firebaseConfig.appId,
+  )
+}
 
 let firebaseApp
 
