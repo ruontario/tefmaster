@@ -664,6 +664,65 @@ textarea:focus {
   line-height: 1;
 }
 
+.test-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) 1fr;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.test-sidebar {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #dce4ec;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.test-sidebar button {
+  display: grid;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid #dce4ec;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #102338;
+  text-align: left;
+  cursor: pointer;
+}
+
+.test-sidebar button.active-test {
+  background: #102338;
+  color: #ffffff;
+  border-color: #102338;
+}
+
+.test-sidebar button strong,
+.test-sidebar button span {
+  display: block;
+}
+
+.test-main {
+  min-width: 0;
+}
+
+.database-panel > .panel-heading {
+  align-items: center;
+}
+
+.database-panel > .panel-heading button {
+  margin-left: auto;
+  padding: 12px 18px;
+  background: #102338;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
 .test-progress span {
   color: #53677d;
   font-weight: 750;

@@ -185,6 +185,14 @@ function createEmptyDatabase() {
           questions: [],
         },
       ],
+      'comprehension-orale': [
+        {
+          id: 'listening-test-1',
+          title: 'TEF Canada - Compréhension orale - Test 1',
+          targetQuestionCount: 40,
+          questions: [],
+        },
+      ],
     },
   }
 }
@@ -207,6 +215,9 @@ function normalizeDatabase(value) {
       'comprehension-ecrite':
         value?.mcqTests?.['comprehension-ecrite'] ||
         empty.mcqTests['comprehension-ecrite'],
+      'comprehension-orale':
+        value?.mcqTests?.['comprehension-orale'] ||
+        empty.mcqTests['comprehension-orale'],
     },
   }
 }
@@ -454,7 +465,7 @@ function App() {
             ? {
                 ...test,
                 questions: [
-                  ...test.questions,
+                  ...(test.questions || []),
                   {
                     id: makeId(),
                     passage,
@@ -471,6 +482,29 @@ function App() {
       },
     }))
     setMcqDraft(emptyMcqDraft)
+  }
+
+  function addMcqTest(sectionId, title) {
+    const testTitle =
+      title || `TEF Canada - ${sectionId === 'comprehension-orale' ? 'Compréhension orale' : 'Compréhension écrite'} - Test ${
+        (database.mcqTests[sectionId]?.length || 0) + 1
+      }`
+
+    setDatabase((current) => ({
+      ...current,
+      mcqTests: {
+        ...current.mcqTests,
+        [sectionId]: [
+          ...(current.mcqTests[sectionId] || []),
+          {
+            id: makeId(),
+            title: testTitle,
+            targetQuestionCount: 40,
+            questions: [],
+          },
+        ],
+      },
+    }))
   }
 
   function removeMcqQuestion(sectionId, testId, questionId) {
@@ -510,6 +544,7 @@ function App() {
           onMcqChoiceChange={updateMcqChoice}
           onAddMcqQuestion={addMcqQuestion}
           onRemoveMcqQuestion={removeMcqQuestion}
+          onAddMcqTest={addMcqTest}
         />
       ) : (
         <HomePage totalResources={totalResources} />
@@ -691,12 +726,31 @@ function SectionPage({
   onMcqChoiceChange,
   onAddMcqQuestion,
   onRemoveMcqQuestion,
+  onAddMcqTest,
 }) {
   const qaSection = database?.qa?.[section.id] || {
     sectionA: [],
     sectionB: [],
   }
-  const readingTests = database?.mcqTests?.[section.id] || null
+  const sectionTests = database?.mcqTests?.[section.id] || []
+  const [activeTestId, setActiveTestId] = useState(sectionTests[0]?.id ?? null)
+
+  useEffect(() => {
+    if (sectionTests.length === 0) {
+      setActiveTestId(null)
+      return
+    }
+
+    if (!sectionTests.some((test) => test.id === activeTestId)) {
+      setActiveTestId(sectionTests[0].id)
+    }
+  }, [section.id, sectionTests])
+
+  const activeTest = sectionTests.find((test) => test.id === activeTestId) || sectionTests[0] || null
+
+  const handleAddTest = () => {
+    onAddMcqTest(section.id)
+  }
 
   return (
     <section className="page-shell">
@@ -767,16 +821,59 @@ function SectionPage({
         />
       )}
 
-      {readingTests?.length > 0 && readingTests[0] && (
-        <McqDatabase
-          section={section}
-          test={readingTests[0]}
-          draft={mcqDraft}
-          onDraftChange={onMcqDraftChange}
-          onChoiceChange={onMcqChoiceChange}
-          onAddQuestion={onAddMcqQuestion}
-          onRemoveQuestion={onRemoveMcqQuestion}
-        />
+      {section.id.startsWith('comprehension') && (
+        <div className="database-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Mock exams</p>
+              <h2>Tests de {section.title}</h2>
+              <p>
+                Créez des tests TEF Canada structurés par section et ajoutez
+                vos questions QCM directement dans Firebase.
+              </p>
+            </div>
+            <button type="button" onClick={handleAddTest}>
+              + Ajouter un test
+            </button>
+          </div>
+
+          <div className="test-grid">
+            <aside className="test-sidebar">
+              {sectionTests.length === 0 ? (
+                <p className="empty-state">Aucun test créé pour cette section.</p>
+              ) : (
+                sectionTests.map((test) => (
+                  <button
+                    key={test.id}
+                    type="button"
+                    className={test.id === activeTestId ? 'active-test' : ''}
+                    onClick={() => setActiveTestId(test.id)}
+                  >
+                    <strong>{test.title}</strong>
+                    <span>
+                      {(test.questions?.length || 0)}/{test.targetQuestionCount} questions
+                    </span>
+                  </button>
+                ))
+              )}
+            </aside>
+            <div className="test-main">
+              {activeTest ? (
+                <McqDatabase
+                  section={section}
+                  test={activeTest}
+                  draft={mcqDraft}
+                  onDraftChange={onMcqDraftChange}
+                  onChoiceChange={onMcqChoiceChange}
+                  onAddQuestion={onAddMcqQuestion}
+                  onRemoveQuestion={onRemoveMcqQuestion}
+                />
+              ) : (
+                <p className="empty-state">Sélectionnez un test ou ajoutez-en un nouveau.</p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )
@@ -900,7 +997,7 @@ function McqDatabase({
           <p className="eyebrow">Test QCM</p>
           <h2>{test.title}</h2>
           <p>
-            Construisez un test complet de compréhension écrite avec 40
+            Construisez un test complet de {section.title} avec {test.targetQuestionCount}
             questions, quatre choix et une seule bonne réponse.
           </p>
         </div>
