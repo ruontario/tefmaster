@@ -498,16 +498,38 @@ function App() {
     }))
   }
 
-  function addMcqQuestion(sectionId, testId) {
+  async function addMcqQuestion(sectionId, testId) {
     const passage = mcqDraft.passage.trim()
     const question = mcqDraft.question.trim()
     const choices = mcqDraft.choices.map((choice) => choice.trim())
     const explanation = mcqDraft.explanation.trim()
-    const audioUrl = mcqDraft.audioUrl.trim()
-    const imageUrl = mcqDraft.imageUrl.trim()
+    let audioUrl = mcqDraft.audioUrl.trim()
+    let imageUrl = mcqDraft.imageUrl.trim()
 
     if (!question || choices.some((choice) => !choice)) {
       return
+    }
+
+    // If audio or image are data URLs (large base64), upload to Firebase Storage
+    try {
+      if (audioUrl && audioUrl.startsWith('data:') && isFirebaseConfigured()) {
+        // lazy import to avoid circular issues
+        const { uploadDataUrl } = await import('./firebase')
+        const remoteAudioUrl = await uploadDataUrl(audioUrl, `audio/${makeId()}`)
+        audioUrl = remoteAudioUrl
+      }
+    } catch (err) {
+      console.warn('Audio upload failed:', err.message)
+    }
+
+    try {
+      if (imageUrl && imageUrl.startsWith('data:') && isFirebaseConfigured()) {
+        const { uploadDataUrl } = await import('./firebase')
+        const remoteImageUrl = await uploadDataUrl(imageUrl, `images/${makeId()}`)
+        imageUrl = remoteImageUrl
+      }
+    } catch (err) {
+      console.warn('Image upload failed:', err.message)
     }
 
     setDatabase((current) => ({
@@ -537,8 +559,10 @@ function App() {
         ),
       },
     }))
+
     setMcqDraft(emptyMcqDraft)
     setImagePreviewUrl(null)
+    setAudioPreviewUrl(null)
   }
 
   function addMcqTest(sectionId, title) {
@@ -1437,9 +1461,9 @@ function McqDatabase({
 
       <form
         className="mcq-form"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault()
-          onAddQuestion(section.id, test.id)
+          await onAddQuestion(section.id, test.id)
         }}
       >
         {isListeningTest ? (

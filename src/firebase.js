@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getDatabase, ref, set, get } from 'firebase/database'
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -32,6 +33,28 @@ export function getFirebaseDatabase() {
   }
 
   return getDatabase(firebaseApp)
+}
+
+export function getFirebaseStorage() {
+  if (!isFirebaseConfigured()) return null
+  if (!firebaseApp) {
+    firebaseApp = initializeApp(firebaseConfig)
+  }
+  return getStorage(firebaseApp)
+}
+
+// Upload a data URL (base64) to Firebase Storage and return a public download URL
+export async function uploadDataUrl(dataUrl, path) {
+  const storage = getFirebaseStorage()
+  if (!storage) {
+    throw new Error('Firebase Storage n’est pas configuré.')
+  }
+
+  const refStorage = storageRef(storage, path)
+  // uploadString supports data_url directly
+  await uploadString(refStorage, dataUrl, 'data_url')
+  const url = await getDownloadURL(refStorage)
+  return url
 }
 
 export function saveDatabaseSnapshot(value) {
