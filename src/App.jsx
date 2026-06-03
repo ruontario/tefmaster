@@ -1442,6 +1442,31 @@ function McqDatabase({
   const progress = `${test.questions?.length || 0}/${test.targetQuestionCount}`
   const isListeningTest = section?.id === 'comprehension-orale'
 
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    const questionText = (draft.question || '').trim()
+    const choicesValid = (draft.choices || []).every((c) => (c || '').trim())
+
+    if (!questionText || !choicesValid) {
+      setError('Veuillez remplir la question et toutes les réponses avant d\'ajouter.')
+      return
+    }
+
+    setError(null)
+    setSaving(true)
+    try {
+      await onAddQuestion(section.id, test.id)
+    } catch (err) {
+      setError(err?.message || 'Erreur lors de l\'enregistrement de la question.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="database-panel">
       <div className="panel-heading">
@@ -1459,13 +1484,7 @@ function McqDatabase({
         </div>
       </div>
 
-      <form
-        className="mcq-form"
-        onSubmit={async (event) => {
-          event.preventDefault()
-          await onAddQuestion(section.id, test.id)
-        }}
-      >
+      <form className="mcq-form" onSubmit={handleSubmit}>
         {isListeningTest ? (
           <label className="wide">
             Clip audio
@@ -1547,11 +1566,15 @@ function McqDatabase({
             rows="3"
           />
         </label>
+        {error && <div className="form-error" role="alert">{error}</div>}
         <button
           type="submit"
-          disabled={(test.questions?.length || 0) >= test.targetQuestionCount}
+          disabled={
+            saving ||
+            (test.questions?.length || 0) >= test.targetQuestionCount
+          }
         >
-          Ajouter la question
+          {saving ? 'Enregistrement...' : 'Ajouter la question'}
         </button>
       </form>
 
