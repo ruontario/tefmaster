@@ -93,6 +93,7 @@ const examSections = [
       'Bonne réponse = 1 point',
       'Pas de réponse / Mauvaise réponse = 0 point',
     ],
+    timerMinutes: 60,
   },
   {
     id: 'comprehension-orale',
@@ -112,6 +113,7 @@ const examSections = [
       'Bonne réponse = 1 point',
       'Pas de réponse / Mauvaise réponse = 0 point',
     ],
+    timerMinutes: 40,
   },
 ]
 
@@ -162,6 +164,8 @@ const emptyMcqDraft = {
   choices: ['', '', '', ''],
   answerIndex: 0,
   explanation: '',
+  audioUrl: '',
+  imageUrl: '',
 }
 
 function createEmptyDatabase() {
@@ -244,6 +248,8 @@ function App() {
   const [database, setDatabase] = useState(loadDatabase)
   const [qaDrafts, setQaDrafts] = useState({})
   const [mcqDraft, setMcqDraft] = useState(emptyMcqDraft)
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState(null)
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null)
   const [firebaseSyncState, setFirebaseSyncState] = useState({
     enabled: false,
     lastSync: null,
@@ -251,7 +257,13 @@ function App() {
   })
   const [firebaseLoaded, setFirebaseLoaded] = useState(false)
 
+  const routeParts = route.split('/').filter(Boolean)
   const activeSection = examSections.find((section) => section.route === route)
+  const generatorSection = examSections.find((section) => section.id === routeParts[1])
+  const attemptSection = examSections.find((section) => section.id === routeParts[1])
+  const attemptTestId = routeParts[2] || null
+  const isGeneratorRoute = routeParts[0] === 'test-generation'
+  const isAttemptRoute = routeParts[0] === 'test-attempt'
 
   const totalResources = useMemo(() => {
     const qa = database?.qa || createEmptyDatabase().qa
@@ -437,6 +449,46 @@ function App() {
     }))
   }
 
+  function handleAudioFileUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result
+      if (typeof dataUrl === 'string') {
+        setMcqDraft((current) => ({
+          ...current,
+          audioUrl: dataUrl,
+        }))
+        setAudioPreviewUrl(dataUrl)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function handleImageFileUpload(event) {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result
+      if (typeof dataUrl === 'string') {
+        setMcqDraft((current) => ({
+          ...current,
+          imageUrl: dataUrl,
+        }))
+        setImagePreviewUrl(dataUrl)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
   function updateMcqChoice(index, value) {
     setMcqDraft((current) => ({
       ...current,
@@ -451,6 +503,8 @@ function App() {
     const question = mcqDraft.question.trim()
     const choices = mcqDraft.choices.map((choice) => choice.trim())
     const explanation = mcqDraft.explanation.trim()
+    const audioUrl = mcqDraft.audioUrl.trim()
+    const imageUrl = mcqDraft.imageUrl.trim()
 
     if (!question || choices.some((choice) => !choice)) {
       return
@@ -473,6 +527,8 @@ function App() {
                     choices,
                     answerIndex: Number(mcqDraft.answerIndex),
                     explanation,
+                    audioUrl,
+                    imageUrl,
                     createdAt: new Date().toISOString(),
                   },
                 ],
@@ -482,6 +538,7 @@ function App() {
       },
     }))
     setMcqDraft(emptyMcqDraft)
+    setImagePreviewUrl(null)
   }
 
   function addMcqTest(sectionId, title) {
@@ -546,6 +603,25 @@ function App() {
           onRemoveMcqQuestion={removeMcqQuestion}
           onAddMcqTest={addMcqTest}
         />
+      ) : isGeneratorRoute ? (
+        <TestGenerationPage
+          database={database}
+          mcqDraft={mcqDraft}
+          initialSectionId={generatorSection?.id}
+          onDraftChange={updateMcqDraft}
+          onChoiceChange={updateMcqChoice}
+          onAddTest={addMcqTest}
+          onAddQuestion={addMcqQuestion}
+          onRemoveQuestion={removeMcqQuestion}
+          onAudioFileUpload={handleAudioFileUpload}
+          onImageFileUpload={handleImageFileUpload}
+        />
+      ) : isAttemptRoute ? (
+        <TestAttemptPage
+          database={database}
+          initialSectionId={attemptSection?.id}
+          initialTestId={attemptTestId}
+        />
       ) : (
         <HomePage totalResources={totalResources} />
       )}
@@ -573,6 +649,18 @@ function SiteHeader({ route, totalResources, firebaseSyncState }) {
               {section.shortTitle}
             </a>
           ))}
+          <a
+            className={route.startsWith('test-generation') ? 'active' : ''}
+            href="#/test-generation/comprehension-ecrite"
+          >
+            Générateur
+          </a>
+          <a
+            className={route.startsWith('test-attempt') ? 'active' : ''}
+            href="#/test-attempt/comprehension-ecrite"
+          >
+            Passer un test
+          </a>
         </div>
       </nav>
       <div className="header-strip" aria-label="Statistiques du site">
@@ -603,11 +691,11 @@ function HomePage({ totalResources }) {
             questions, réponses et tests QCM.
           </p>
           <div className="hero-actions">
-            <a className="primary-link" href="#/expression-ecrite">
-              Ajouter des questions
+            <a className="primary-link" href="#/test-generation/comprehension-ecrite">
+              Générateur de tests
             </a>
-            <a className="secondary-link" href="#format">
-              Voir le format
+            <a className="secondary-link" href="#/test-attempt/comprehension-ecrite">
+              Passer un test
             </a>
           </div>
         </div>
@@ -711,6 +799,376 @@ function HomePage({ totalResources }) {
         </div>
       </section>
     </>
+  )
+}
+
+function TestGenerationPage({
+  database,
+  mcqDraft,
+  initialSectionId,
+  onDraftChange,
+  onChoiceChange,
+  onAddTest,
+  onAddQuestion,
+  onRemoveQuestion,
+  onAudioFileUpload,
+  onImageFileUpload,
+}) {
+  const sections = examSections.filter((section) => section.id.startsWith('comprehension'))
+  const defaultSectionId =
+    initialSectionId && sections.some((section) => section.id === initialSectionId)
+      ? initialSectionId
+      : sections[0]?.id
+  const [selectedSectionId, setSelectedSectionId] = useState(defaultSectionId)
+  const tests = database?.mcqTests?.[selectedSectionId] || []
+  const [selectedTestId, setSelectedTestId] = useState(tests[0]?.id ?? null)
+  const [newTestTitle, setNewTestTitle] = useState('')
+
+  useEffect(() => {
+    if (!tests.some((test) => test.id === selectedTestId)) {
+      setSelectedTestId(tests[0]?.id ?? null)
+    }
+  }, [selectedSectionId, tests, selectedTestId])
+
+  const selectedSection = examSections.find((section) => section.id === selectedSectionId)
+  const selectedTest = tests.find((test) => test.id === selectedTestId) || null
+
+  return (
+    <section className="page-shell">
+      <div className="section-hero">
+        <p className="eyebrow">Générateur de tests</p>
+        <h1>Créer des tests pour {selectedSection?.title ?? 'la compréhension'}</h1>
+        <p>
+          Utilisez cette page pour créer et gérer des tests QCM TEF Canada, puis
+          passez-les dans l’environnement de test.
+        </p>
+      </div>
+
+      <div className="database-callout">
+        <div>
+          <p className="eyebrow">Sélection de l’épreuve</p>
+          <h2>Section de test</h2>
+          <p>
+            Choisissez la section à laquelle le test appartient, puis ajoutez
+            des questions QCM dédiées à ce test.
+          </p>
+        </div>
+        <div className="database-form">
+          <label>
+            Section
+            <select
+              value={selectedSectionId}
+              onChange={(event) => setSelectedSectionId(event.target.value)}
+            >
+              {sections.map((section) => (
+                <option key={section.id} value={section.id}>
+                  {section.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="wide">
+            Nouveau test
+            <input
+              value={newTestTitle}
+              onChange={(event) => setNewTestTitle(event.target.value)}
+              placeholder="Titre du test (optionnel)"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              onAddTest(selectedSectionId, newTestTitle.trim() || undefined)
+              setNewTestTitle('')
+            }}
+          >
+            Créer le test
+          </button>
+        </div>
+      </div>
+
+      <div className="test-grid">
+        <aside className="test-sidebar">
+          {tests.length === 0 ? (
+            <p className="empty-state">Aucun test créé pour cette section.</p>
+          ) : (
+            tests.map((test) => (
+              <button
+                key={test.id}
+                type="button"
+                className={test.id === selectedTestId ? 'active-test' : ''}
+                onClick={() => setSelectedTestId(test.id)}
+              >
+                <strong>{test.title}</strong>
+                <span>
+                  {(test.questions?.length || 0)}/{test.targetQuestionCount} questions
+                </span>
+              </button>
+            ))
+          )}
+        </aside>
+
+        <div className="test-main">
+          {selectedTest ? (
+            <McqDatabase
+              section={selectedSection}
+              test={selectedTest}
+              draft={mcqDraft}
+              onDraftChange={onDraftChange}
+              onChoiceChange={onChoiceChange}
+              onAddQuestion={onAddQuestion}
+              onRemoveQuestion={onRemoveQuestion}
+              onAudioFileUpload={onAudioFileUpload}
+              onImageFileUpload={onImageFileUpload}
+            />
+          ) : (
+            <div className="empty-state">
+              Sélectionnez un test existant ou créez-en un nouveau pour commencer.
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function TestAttemptPage({ database, initialSectionId, initialTestId }) {
+  const sections = examSections.filter((section) => section.id.startsWith('comprehension'))
+  const defaultSectionId =
+    initialSectionId && sections.some((section) => section.id === initialSectionId)
+      ? initialSectionId
+      : sections[0]?.id
+  const [selectedSectionId, setSelectedSectionId] = useState(defaultSectionId)
+  const tests = database?.mcqTests?.[selectedSectionId] || []
+  const defaultTestId =
+    initialTestId && tests.some((test) => test.id === initialTestId)
+      ? initialTestId
+      : tests[0]?.id
+  const [selectedTestId, setSelectedTestId] = useState(defaultTestId)
+  const [examState, setExamState] = useState('ready')
+  const [answers, setAnswers] = useState({})
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const selectedSection = examSections.find((section) => section.id === selectedSectionId)
+  const selectedTest = tests.find((test) => test.id === selectedTestId) || null
+  const durationSeconds = (selectedSection?.timerMinutes || 0) * 60
+  const [remainingSeconds, setRemainingSeconds] = useState(durationSeconds)
+
+  useEffect(() => {
+    if (!tests.some((test) => test.id === selectedTestId)) {
+      setSelectedTestId(tests[0]?.id ?? null)
+    }
+  }, [selectedSectionId, tests, selectedTestId])
+
+  useEffect(() => {
+    setAnswers({})
+    setCurrentQuestionIndex(0)
+    setExamState('ready')
+    setRemainingSeconds(durationSeconds)
+  }, [selectedSectionId, selectedTestId, durationSeconds])
+
+  useEffect(() => {
+    if (examState !== 'running') {
+      return
+    }
+
+    const timer = setInterval(() => {
+      setRemainingSeconds((seconds) => {
+        if (seconds <= 1) {
+          clearInterval(timer)
+          setExamState('finished')
+          return 0
+        }
+        return seconds - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [examState])
+
+  const currentQuestion = selectedTest?.questions?.[currentQuestionIndex] || null
+  const totalQuestions = selectedTest?.questions?.length || 0
+  const correctAnswers = selectedTest?.questions?.reduce(
+    (count, question) =>
+      count + (answers[question.id] === question.answerIndex ? 1 : 0),
+    0,
+  )
+
+  const formattedTime = `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(
+    remainingSeconds % 60,
+  ).padStart(2, '0')}`
+
+  return (
+    <section className="page-shell">
+      <div className="section-hero">
+        <p className="eyebrow">Mode examen</p>
+        <h1>Passer un test TEF Canada</h1>
+        <p>
+          Sélectionnez un examen, démarrez le minuteur et répondez comme dans une
+          vraie épreuve.
+        </p>
+      </div>
+
+      <div className="database-callout">
+        <div>
+          <p className="eyebrow">Sélection du test</p>
+          <h2>Choisissez votre épreuve</h2>
+          <p>
+            Les tests sont quatre-choix et s’appuient sur votre banque de
+            questions. Le minuteur reflète la durée officielle des sections
+            écrite et orale.
+          </p>
+        </div>
+        <div className="database-form">
+          <label>
+            Section
+            <select
+              value={selectedSectionId}
+              onChange={(event) => setSelectedSectionId(event.target.value)}
+            >
+              {sections.map((section) => (
+                <option key={section.id} value={section.id}>
+                  {section.title}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Test
+            <select
+              value={selectedTestId || ''}
+              onChange={(event) => setSelectedTestId(event.target.value)}
+            >
+              <option value="" disabled>
+                Sélectionnez un test
+              </option>
+              {tests.map((test) => (
+                <option key={test.id} value={test.id}>
+                  {test.title}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button
+            type="button"
+            onClick={() => setExamState('running')}
+            disabled={!selectedTest || examState === 'running'}
+          >
+            Démarrer le test
+          </button>
+        </div>
+      </div>
+
+      {selectedTest ? (
+        <div className="database-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Examen en temps réel</p>
+              <h2>{selectedTest.title}</h2>
+              <p>
+                {examState === 'ready'
+                  ? 'Cliquez sur Démarrer le test pour lancer le compte à rebours.'
+                  : examState === 'running'
+                  ? 'Répondez aux questions et gardez un œil sur le temps.'
+                  : 'Faites le bilan de vos réponses après la fin du test.'}
+              </p>
+            </div>
+            <div className="test-progress">
+              <strong>{formattedTime}</strong>
+              <span>Temps restant</span>
+            </div>
+          </div>
+
+          {examState === 'finished' && (
+            <div className="content-panel">
+              <h2>Résultats</h2>
+              <p>
+                {correctAnswers}/{totalQuestions} bonnes réponses
+              </p>
+              <p>
+                Score estimé : {Math.round((correctAnswers / Math.max(totalQuestions, 1)) * 100)}%
+              </p>
+            </div>
+          )}
+
+          {currentQuestion ? (
+            <div className="content-panel">
+              <div className="question-card">
+                <div className="panel-heading">
+                  <div>
+                    <span className="eyebrow">Question {currentQuestionIndex + 1}</span>
+                    <h3>{currentQuestion.question}</h3>
+                  </div>
+                </div>
+                {currentQuestion.audioUrl ? (
+                  <audio controls style={{ width: '100%', marginBottom: '12px' }} autoPlay>
+                    <source src={currentQuestion.audioUrl} />
+                    Votre navigateur ne supporte pas le lecteur audio.
+                  </audio>
+                ) : null}
+                {currentQuestion.imageUrl ? (
+                  <img
+                    src={currentQuestion.imageUrl}
+                    alt="Question image"
+                    style={{ maxWidth: '100%', marginBottom: '12px', maxHeight: '300px' }}
+                  />
+                ) : null}
+                {currentQuestion.passage ? (
+                  <p className="passage">{currentQuestion.passage}</p>
+                ) : null}
+                <div className="mcq-form">
+                  {currentQuestion.choices.map((choice, index) => (
+                    <label key={index}>
+                      <input
+                        type="radio"
+                        name={currentQuestion.id}
+                        checked={answers[currentQuestion.id] === index}
+                        disabled={examState !== 'running'}
+                        onChange={() =>
+                          setAnswers((current) => ({ ...current, [currentQuestion.id]: index }))
+                        }
+                      />
+                      {choice}
+                    </label>
+                  ))}
+                </div>
+
+                <div className="question-navigation">
+                  <button
+                    type="button"
+                    disabled={currentQuestionIndex === 0}
+                    onClick={() => setCurrentQuestionIndex((index) => Math.max(index - 1, 0))}
+                  >
+                    Précédent
+                  </button>
+                  <button
+                    type="button"
+                    disabled={currentQuestionIndex >= totalQuestions - 1}
+                    onClick={() =>
+                      setCurrentQuestionIndex((index) => Math.min(index + 1, totalQuestions - 1))
+                    }
+                  >
+                    Suivant
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExamState('finished')}
+                    disabled={examState !== 'running'}
+                  >
+                    Terminer
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="empty-state">Ce test ne contient pas encore de questions.</p>
+          )}
+        </div>
+      ) : (
+        <p className="empty-state">Sélectionnez un test pour commencer l’épreuve.</p>
+      )}
+    </section>
   )
 }
 
@@ -822,56 +1280,23 @@ function SectionPage({
       )}
 
       {section.id.startsWith('comprehension') && (
-        <div className="database-panel">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Mock exams</p>
-              <h2>Tests de {section.title}</h2>
-              <p>
-                Créez des tests TEF Canada structurés par section et ajoutez
-                vos questions QCM directement dans Firebase.
-              </p>
-            </div>
-            <button type="button" onClick={handleAddTest}>
-              + Ajouter un test
-            </button>
+        <div className="database-callout">
+          <div>
+            <p className="eyebrow">Créateur et examen</p>
+            <h2>Gérer et passer les tests {section.title}</h2>
+            <p>
+              Les questions de compréhension sont gérées sur une page dédiée. Créez
+              vos tests dans le générateur puis passez-les dans l’environnement
+              d’examen pour un compte à rebours réel.
+            </p>
           </div>
-
-          <div className="test-grid">
-            <aside className="test-sidebar">
-              {sectionTests.length === 0 ? (
-                <p className="empty-state">Aucun test créé pour cette section.</p>
-              ) : (
-                sectionTests.map((test) => (
-                  <button
-                    key={test.id}
-                    type="button"
-                    className={test.id === activeTestId ? 'active-test' : ''}
-                    onClick={() => setActiveTestId(test.id)}
-                  >
-                    <strong>{test.title}</strong>
-                    <span>
-                      {(test.questions?.length || 0)}/{test.targetQuestionCount} questions
-                    </span>
-                  </button>
-                ))
-              )}
-            </aside>
-            <div className="test-main">
-              {activeTest ? (
-                <McqDatabase
-                  section={section}
-                  test={activeTest}
-                  draft={mcqDraft}
-                  onDraftChange={onMcqDraftChange}
-                  onChoiceChange={onMcqChoiceChange}
-                  onAddQuestion={onAddMcqQuestion}
-                  onRemoveQuestion={onRemoveMcqQuestion}
-                />
-              ) : (
-                <p className="empty-state">Sélectionnez un test ou ajoutez-en un nouveau.</p>
-              )}
-            </div>
+          <div>
+            <a className="primary-link" href={`#/test-generation/${section.id}`}>
+              Générateur de tests
+            </a>
+            <a className="secondary-link dark" href={`#/test-attempt/${section.id}`}>
+              Passer un test
+            </a>
           </div>
         </div>
       )}
@@ -983,12 +1408,15 @@ function McqDatabase({
   onChoiceChange,
   onAddQuestion,
   onRemoveQuestion,
+  onAudioFileUpload,
+  onImageFileUpload,
 }) {
   if (!test) {
     return null
   }
 
   const progress = `${test.questions?.length || 0}/${test.targetQuestionCount}`
+  const isListeningTest = section?.id === 'comprehension-orale'
 
   return (
     <div className="database-panel">
@@ -1014,21 +1442,53 @@ function McqDatabase({
           onAddQuestion(section.id, test.id)
         }}
       >
+        {isListeningTest ? (
+          <label className="wide">
+            Clip audio
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={onAudioFileUpload}
+            />
+            {draft.audioUrl && (
+              <audio controls style={{ marginTop: '12px', width: '100%' }}>
+                <source src={draft.audioUrl} />
+                Votre navigateur ne supporte pas le lecteur audio.
+              </audio>
+            )}
+          </label>
+        ) : (
+          <label className="wide">
+            Texte ou document support
+            <textarea
+              value={draft.passage}
+              onChange={(event) => onDraftChange('passage', event.target.value)}
+              placeholder="Collez le texte court, l'annonce ou le document associé à la question."
+              rows="4"
+            />
+          </label>
+        )}
         <label className="wide">
-          Texte ou document support
-          <textarea
-            value={draft.passage}
-            onChange={(event) => onDraftChange('passage', event.target.value)}
-            placeholder="Collez le texte court, l'annonce ou le document associé à la question."
-            rows="4"
+          Image (optionnel)
+          <input
+            type="file"
+            accept="image/*"
+            onChange={onImageFileUpload}
           />
+          {draft.imageUrl && (
+            <img
+              src={draft.imageUrl}
+              alt="Preview"
+              style={{ marginTop: '12px', maxWidth: '100%', maxHeight: '200px' }}
+            />
+          )}
         </label>
         <label className="wide">
           Question
           <textarea
             value={draft.question}
             onChange={(event) => onDraftChange('question', event.target.value)}
-            placeholder="Ex. Quelle information est correcte selon le document ?"
+            placeholder={isListeningTest ? "Ex. De quel sujet s'agit-il ?" : "Ex. Quelle information est correcte selon le document ?"}
             rows="3"
           />
         </label>
@@ -1079,6 +1539,19 @@ function McqDatabase({
             <article className="mcq-item" key={item.id}>
               <div className="mcq-question">
                 <span>Question {index + 1}</span>
+                {item.audioUrl && (
+                  <audio controls style={{ width: '100%', marginBottom: '12px' }}>
+                    <source src={item.audioUrl} />
+                    Votre navigateur ne supporte pas le lecteur audio.
+                  </audio>
+                )}
+                {item.imageUrl && (
+                  <img
+                    src={item.imageUrl}
+                    alt="Question image"
+                    style={{ maxWidth: '100%', marginBottom: '12px', maxHeight: '200px' }}
+                  />
+                )}
                 {item.passage && <p className="passage">{item.passage}</p>}
                 <h3>{item.question}</h3>
                 <ol type="A">
