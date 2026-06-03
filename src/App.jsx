@@ -510,27 +510,36 @@ function App() {
       return
     }
 
-    // If audio or image are data URLs (large base64), upload to Firebase Storage
-    try {
-      if (audioUrl && audioUrl.startsWith('data:') && isFirebaseConfigured()) {
-        // lazy import to avoid circular issues
+    // Helper: try upload but timeout after X ms, fall back to inline data URL on failure
+    async function uploadWithTimeout(dataUrl, path, timeoutMs = 15000) {
+      if (!dataUrl || !dataUrl.startsWith('data:') || !isFirebaseConfigured()) return null
+
+      try {
         const { uploadDataUrl } = await import('./firebase')
-        const remoteAudioUrl = await uploadDataUrl(audioUrl, `audio/${makeId()}`)
-        audioUrl = remoteAudioUrl
+
+        const uploadPromise = uploadDataUrl(dataUrl, path)
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), timeoutMs),
+        )
+
+        const result = await Promise.race([uploadPromise, timeoutPromise])
+        return result
+      } catch (err) {
+        console.warn(`Upload failed for ${path}:`, err?.message || err)
+        return null
       }
-    } catch (err) {
-      console.warn('Audio upload failed:', err.message)
     }
 
-    try {
-      if (imageUrl && imageUrl.startsWith('data:') && isFirebaseConfigured()) {
-        const { uploadDataUrl } = await import('./firebase')
-        const remoteImageUrl = await uploadDataUrl(imageUrl, `images/${makeId()}`)
-        imageUrl = remoteImageUrl
-      }
-    } catch (err) {
-      console.warn('Image upload failed:', err.message)
-    }
+    // attempt uploads but don't block indefinitely
+    const attemptedAudioUrl = audioUrl && audioUrl.startsWith('data:')
+      ? await uploadWithTimeout(audioUrl, `audio/${makeId()}`)
+      : null
+    if (attemptedAudioUrl) audioUrl = attemptedAudioUrl
+
+    const attemptedImageUrl = imageUrl && imageUrl.startsWith('data:')
+      ? await uploadWithTimeout(imageUrl, `images/${makeId()}`)
+      : null
+    if (attemptedImageUrl) imageUrl = attemptedImageUrl
 
     setDatabase((current) => ({
       ...current,
